@@ -1,14 +1,11 @@
 
 import SpriteKit
 
-enum ObstacleType: Int {
-    case nonePass = 1,
-    trianglePass = 2,
-    circlePass = 3,
-    squarePass = 4,
-    allPass = 5
+enum GameSceneState {
+    case active, gameOver
 }
-class GameScene: SKScene {
+
+class GameScene: SKScene, SKPhysicsContactDelegate {
     
     var player: Player!
     
@@ -21,11 +18,45 @@ class GameScene: SKScene {
 //    Array with all passable obstacle types
     var obstaclePassArray: [String] = ["trianglePass", "circlePass", "squarePass", "allPass"]
     
-//   Swipe gestures
+//    Declaration of obstacle variables
+    var nonePass: SKSpriteNode!
+    var trianglePass: SKSpriteNode!
+    var squarePass: SKSpriteNode!
+    var circlePass: SKSpriteNode!
+    var allPass: SKSpriteNode!
+    var scoreLabel: SKLabelNode!
+    
+//    Declaration of ScrollLayer
+    var scrollLayer: SKNode!
+    
+//    Declaration of scrollSpeed -- fixedDelta -- spawnTimer -- addToY
+    let scrollSpeed: CGFloat = 100
+    let fixedDelta: CFTimeInterval = 1.0 / 60.0 /* 60 FPS */
+    var spawnTimer: CFTimeInterval = 0
+    var addToY: CGFloat = 0
+    var score = 0
+    var contactMade = 0
+    
+//     Game management 
+    var gameState: GameSceneState = .active
+    
     override func didMove(to view: SKView) {
         
+//        add reference - player
         player = childNode(withName: "//player") as? Player
         
+//        add references - obstacles
+        nonePass = childNode(withName: "//NonePass") as? SKSpriteNode
+        trianglePass = childNode(withName: "//TrianglePass") as? SKSpriteNode
+        squarePass = childNode(withName: "//SquarePass") as? SKSpriteNode
+        circlePass = childNode(withName: "//CirclePass") as? SKSpriteNode
+        allPass = childNode(withName: "//AllPass") as? SKSpriteNode
+        scoreLabel = self.childNode(withName: "ScoreLabel") as! SKLabelNode
+        
+//         add reference - scrollLayer
+        scrollLayer = self.childNode(withName: "scrollLayer")
+        
+//        Swipe gestures
         let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(self.respondToSwipeGesture))
         swipeRight.direction = UISwipeGestureRecognizerDirection.right
         self.view?.addGestureRecognizer(swipeRight)
@@ -34,7 +65,12 @@ class GameScene: SKScene {
         swipeLeft.direction = UISwipeGestureRecognizerDirection.left
         self.view?.addGestureRecognizer(swipeLeft)
         
-//          calle obstacle possibility array func
+        /* Set physics contact delegate */
+        physicsWorld.contactDelegate = self
+        
+        scoreLabel.text = "\(score)"
+        
+//          obstacle possibility array func
         createObstacleArray()
     }
     
@@ -48,12 +84,10 @@ class GameScene: SKScene {
             tap = false
             switch swipeGesture.direction {
             case UISwipeGestureRecognizerDirection.right:
-                print("Swiped right")
                 if player.lane.rawValue < 2 {
                     player.lane = Lane(rawValue: player.lane.rawValue + 1)!
                 }
             case UISwipeGestureRecognizerDirection.left:
-                print("Swiped left")
                 if player.lane.rawValue > 0 {
                     player.lane = Lane(rawValue: player.lane.rawValue - 1)!
                 }
@@ -67,25 +101,60 @@ class GameScene: SKScene {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         if tap == true {
             
-            createObstacle() // Test 
-            
             switch player.shape {
             case .circle:
                 player.shape = .square
                 player.run(SKAction(named: "CircleToSquare")!)
-                print ("changed shape to square")
             case .square:
                 player.shape = .triangle
                 player.run(SKAction(named: "SquareToTriangle")!)
-                print ("changed shape to triangle")
             case .triangle:
                 player.shape = .circle
                 player.run(SKAction(named: "TriangleToCircle")!)
-                print ("changed shape to circle")
+            }
+        }
+    }
+ 
+    //    Update obstacles
+    func updateObstacles() {
+        
+        scrollLayer.position.y -= scrollSpeed * CGFloat(fixedDelta)
+        addToY += scrollSpeed * CGFloat(fixedDelta)
+        
+//        Spawn obstacles
+        if spawnTimer >= 2.3 {
+            createObstacle()
+            spawnTimer = 0
+        }
+        
+//         Loop through obstacle layer nodes
+        for obstacle in scrollLayer.children as! [SKSpriteNode] {
+            
+//             Get obstacle node position, convert node position to scene space
+            let obstaclePosition = scrollLayer.convert(obstacle.position, to: self)
+            
+//             Check if obstacle has left the scene
+            if obstaclePosition.y <= -40 {
+//                 Remove obstacle node from obstacle layer
+                obstacle.removeFromParent()
             }
         }
     }
     
+    override func update(_ currentTime: TimeInterval) {
+        spawnTimer += fixedDelta
+        updateObstacles()
+//        Kill player
+        if player.position.y < 0 {
+            gameOver()
+        } else if contactMade == 1 {
+            score += 1
+            contactMade = 0
+//             Update score label 
+            scoreLabel.text = String(score)
+        }
+    }
+
 //    Create Array -- contains all the possible obstacles
     func createObstacleArray () {
         
@@ -131,9 +200,56 @@ class GameScene: SKScene {
             currentObstacleArray[rand2] = obstaclePassArray[rand3]
         }
         
-//        Test
-        for currentObstacleArr in currentObstacleArray {
-            print ("\(currentObstacleArr) ")
+        addObstaclesToScene(currentObstacleArray: currentObstacleArray)
+    }
+    
+    func addObstaclesToScene (currentObstacleArray: [String]) {
+        var currentObstacle: String?
+        for laneCount in 0...2 {
+            
+            // declare variable for shape as currentObstacleArray[laneCount]
+            currentObstacle = currentObstacleArray[laneCount]
+            
+//            Check for shape in the array then copy the respective shape in-game
+//            Set X position for the new obstacle to its repective lane
+//            Set Y position to 700
+            switch currentObstacle! {
+            case "nonePass":
+                let newObstacle = nonePass.copy() as! SKSpriteNode
+                newObstacle.position.x = CGFloat(laneCount * 110 + 50)
+                newObstacle.position.y = CGFloat(700 + addToY)
+                scrollLayer.addChild(newObstacle)
+            case "trianglePass":
+                let newObstacle = trianglePass.copy() as! SKSpriteNode
+                newObstacle.position.x = CGFloat(laneCount * 110 + 50)
+                newObstacle.position.y = CGFloat(700 + addToY)
+                scrollLayer.addChild(newObstacle)
+            case "squarePass":
+                let newObstacle = squarePass.copy() as! SKSpriteNode
+                newObstacle.position.x = CGFloat(laneCount * 110 + 50)
+                newObstacle.position.y = CGFloat(700 + addToY)
+                scrollLayer.addChild(newObstacle)
+            case "circlePass":
+                let newObstacle = circlePass.copy() as! SKSpriteNode
+                newObstacle.position.x = CGFloat(laneCount * 110 + 50)
+                newObstacle.position.y = CGFloat(700 + addToY)
+                scrollLayer.addChild(newObstacle)
+            case "allPass":
+                let newObstacle = allPass.copy() as! SKSpriteNode
+                newObstacle.position.x = CGFloat(laneCount * 110 + 50)
+                newObstacle.position.y = CGFloat(700 + addToY)
+                scrollLayer.addChild(newObstacle)
+            default:
+                break
+            }
         }
+    }
+    
+    func gameOver() {
+        player.run(SKAction(named: "PlayerDeath")!)
+    }
+    
+    func didBegin(_ contact: SKPhysicsContact) {
+        contactMade = 1
     }
 }

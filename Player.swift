@@ -34,14 +34,14 @@ class Player: SKSpriteNode {
     var shape: Shape = .circle {
         didSet {
             if shape == .circle {
-                self.physicsBody?.collisionBitMask = 1
-                self.physicsBody?.contactTestBitMask = 1
+                self.physicsBody?.collisionBitMask = 7
+                self.physicsBody?.contactTestBitMask = 24
             } else if shape == .square {
-                self.physicsBody?.collisionBitMask = 1
-                self.physicsBody?.contactTestBitMask = 1
+                self.physicsBody?.collisionBitMask = 11
+                self.physicsBody?.contactTestBitMask = 20
             } else {
-                self.physicsBody?.collisionBitMask = 1
-                self.physicsBody?.contactTestBitMask = 1
+                self.physicsBody?.collisionBitMask = 13
+                self.physicsBody?.contactTestBitMask = 18
             }
         }
     }
